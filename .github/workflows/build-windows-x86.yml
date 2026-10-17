@@ -123,12 +123,40 @@ jobs:
 
       - name: Setup shaderc
         run: |
+          $ErrorActionPreference = 'Stop'
           $ProgressPreference = 'SilentlyContinue'
-          $url = ((Invoke-WebRequest -UseBasicParsing -Uri "https://storage.googleapis.com/shaderc/badges/build_link_windows_vs2019_release.html").Content | Select-String -Pattern 'url=(.*)"').Matches.Groups[1].Value
-          Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile .\shaderc.zip
-          Expand-Archive -LiteralPath "shaderc.zip" -DestinationPath "."
-          cp "./install/*" "./${{ env.dep_folder }}" -Force -Recurse
-          rm "./install" -r -force
+
+          # The old VS2019 badge URL has been removed. The shaderc project's
+          # current Downloads page publishes this VS2022 x64 release link.
+          $linkPage = 'https://storage.googleapis.com/shaderc/badges/build_link_windows_vs2022_amd64_release.html'
+          Write-Host "Resolving the current shaderc Windows x64 release from $linkPage"
+          $pageContent = (Invoke-WebRequest -UseBasicParsing -Uri $linkPage -TimeoutSec 60).Content
+
+          # The badge page contains the current artifact URL as url="...".
+          $match = [regex]::Match($pageContent, 'url=(https?://[^"''\s<>]+)')
+          if (-not $match.Success) {
+            throw "Could not find the shaderc ZIP URL in the official build-link page: $linkPage"
+          }
+          $shadercUrl = [System.Net.WebUtility]::HtmlDecode($match.Groups[1].Value)
+          Write-Host "Downloading shaderc artifact from $shadercUrl"
+          Invoke-WebRequest -UseBasicParsing -Uri $shadercUrl -OutFile '.\shaderc.zip' -TimeoutSec 600
+
+          if (!(Test-Path '.\shaderc.zip') -or (Get-Item '.\shaderc.zip').Length -lt 1MB) {
+            throw 'The shaderc download is missing or unexpectedly small.'
+          }
+
+          Expand-Archive -LiteralPath '.\shaderc.zip' -DestinationPath '.\shaderc-unpack' -Force
+          $shadercInstall = Join-Path $PWD 'shaderc-unpack\install'
+          if (!(Test-Path $shadercInstall)) {
+            throw 'The shaderc archive did not contain the expected install\ directory.'
+          }
+
+          Copy-Item -Path (Join-Path $shadercInstall '*') -Destination "${{ env.dep_folder }}" -Recurse -Force
+          if (!(Test-Path "${{ env.dep_folder }}\bin\shaderc_shared.dll")) {
+            throw 'shaderc was downloaded, but deps\bin\shaderc_shared.dll was not found after extraction.'
+          }
+
+          Write-Host 'shaderc setup completed.'
 
       - name: Make build directory
         run: |
