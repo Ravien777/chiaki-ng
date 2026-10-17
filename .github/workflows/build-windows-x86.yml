@@ -126,10 +126,9 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $ProgressPreference = 'SilentlyContinue'
 
-          # The old VS2019 badge URL has been removed. The shaderc project's
-          # current Downloads page publishes this VS2022 x64 release link.
+          # Use shaderc's current documented VS 2022 x64 release link.
           $linkPage = 'https://storage.googleapis.com/shaderc/badges/build_link_windows_vs2022_amd64_release.html'
-          Write-Host "Resolving the current shaderc Windows x64 release from $linkPage"
+          Write-Host "WORKFLOW FIXED V3: shaderc source link = $linkPage"
           $pageContent = (Invoke-WebRequest -UseBasicParsing -Uri $linkPage -TimeoutSec 60).Content
 
           # The badge page contains the current artifact URL as url="...".
