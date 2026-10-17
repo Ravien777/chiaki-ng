@@ -8,7 +8,7 @@ An open source PlayStation remote play project serving as the next-generation of
 ## Discord
 [chiaki-ng community Discord](https://discord.gg/tAMbRuwXDH)
 
-## Disclaimer
+## Disclaimer!
 This project is not endorsed or certified by Sony Interactive Entertainment LLC.
 
 Chiaki is a Free and Open Source Software Client for PlayStation 4 and PlayStation 5 Remote Play
