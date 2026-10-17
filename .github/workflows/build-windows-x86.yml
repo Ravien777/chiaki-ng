@@ -37,12 +37,29 @@ jobs:
 
       - name: Setup Vulkan
         run: |
+          $ErrorActionPreference = 'Stop'
           $ProgressPreference = 'SilentlyContinue'
-          $ver = (Invoke-WebRequest -Uri "https://vulkan.lunarg.com/sdk/latest.json" | ConvertFrom-Json).windows
-          echo Version $ver
-          Invoke-WebRequest -Uri "https://sdk.lunarg.com/sdk/download/$ver/windows/vulkansdk-windows-X64-$ver.exe" -OutFile VulkanSDK.exe
-          echo Downloaded
-          .\VulkanSDK.exe --root ${{ env.VULKAN_SDK }}  --accept-licenses --default-answer --confirm-command install
+
+          # Use LunarG's Windows-specific plain-text endpoint. -UseBasicParsing
+          # avoids the legacy Internet Explorer parser used by Windows PowerShell 5.1.
+          $versionUrl = 'https://vulkan.lunarg.com/sdk/latest/windows.txt'
+          $versionResponse = Invoke-WebRequest -UseBasicParsing -Uri $versionUrl -TimeoutSec 60
+          $ver = $versionResponse.Content.Trim()
+
+          if ($ver -notmatch '^\d+\.\d+\.\d+\.\d+$') {
+            throw "LunarG returned an unexpected Vulkan SDK version ('$ver') from $versionUrl"
+          }
+
+          Write-Host "Vulkan SDK version: $ver"
+          $installerUrl = "https://sdk.lunarg.com/sdk/download/$ver/windows/vulkansdk-windows-X64-$ver.exe"
+          Invoke-WebRequest -UseBasicParsing -Uri $installerUrl -OutFile '.\VulkanSDK.exe' -TimeoutSec 900
+
+          if (!(Test-Path '.\VulkanSDK.exe') -or (Get-Item '.\VulkanSDK.exe').Length -lt 1MB) {
+            throw "Vulkan SDK installer download is missing or unexpectedly small: $installerUrl"
+          }
+
+          Write-Host 'Installing Vulkan SDK...'
+          .\VulkanSDK.exe --root '${{ env.VULKAN_SDK }}' --accept-licenses --default-answer --confirm-command install
 
       - name: Set up Ninja
         run: choco install ninja
