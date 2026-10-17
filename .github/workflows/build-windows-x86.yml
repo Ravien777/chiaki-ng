@@ -6,12 +6,17 @@ on:
 jobs:
   build-win_x64:
     name: Build chiaki-ng win_x64 (VC)
-    runs-on: windows-latest
+    # Windows Server 2022 runner includes the VS 2022 toolchain used by Qt 6.9.
+    runs-on: windows-2022
     env:
+      # Some upstream actions still declare node20. GitHub removed Node 20 on 2026-09-23;
+      # force those legacy actions to run under the Node 24 runtime while they are upgraded.
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
       CC: clang-cl.exe
       CXX: clang-cl.exe
       VULKAN_SDK: C:\VulkanSDK\
       triplet: x64-windows
+      VCPKG_DEFAULT_TRIPLET: x64-windows
       vcpkg_baseline: 42bb0d9e8d4cf33485afb9ee2229150f79f61a1f
       dep_folder: deps
       libplacebo_tag: v7.360.1
@@ -22,7 +27,7 @@ jobs:
         shell: powershell
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: 'recursive'
 
@@ -43,12 +48,18 @@ jobs:
         run: choco install ninja
 
       - name: Set up Clang
-        uses: egor-tensin/setup-clang@v1
+        uses: egor-tensin/setup-clang@v2
         with:
           version: 18
 
       - name: Setup MSVC
         uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Setup Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+          architecture: "x64"
 
       - name: Setup Qt
         uses: jurplel/install-qt-action@v4
@@ -56,15 +67,14 @@ jobs:
           version: "6.9.*"
           host: 'windows'
           target: 'desktop'
+          setup-python: false
           modules: 'qtwebengine qtpositioning qtwebchannel qtwebsockets qtserialport'
 
       - name: Install pip dependencies
         run: |
-          ${{ env.pythonLocation }}\python.exe -m pip install --upgrade pip
-          ${{ env.pythonLocation }}\python.exe -m pip install --upgrade setuptools wheel
-          ${{ env.pythonLocation }}\python.exe -m pip install --user --upgrade scons protobuf grpcio-tools pyinstaller
-          ${{ env.pythonLocation }}\python.exe -m pip install --user --upgrade meson
-          ${{ env.pythonLocation }}\python.exe -c 'import google.protobuf; print(google.protobuf.__file__)'
+          python -m pip install --upgrade pip setuptools wheel
+          python -m pip install --upgrade scons protobuf grpcio-tools pyinstaller meson
+          python -c 'import google.protobuf; print(google.protobuf.__file__)'
 
       - name: Setup ffmpeg
         run: |
@@ -130,8 +140,8 @@ jobs:
           -Dcpp_link_args="/LIBPATH:${{ env.VULKAN_SDK }}Lib" `
           -Ddemos=false `
           ./build
-          ninja -C./build
-          ninja -C./build install
+          ninja -C ./build
+          ninja -C ./build install
 
       - name: Apply Patches
         run: |
@@ -149,7 +159,7 @@ jobs:
           -DCHIAKI_ENABLE_CLI=OFF `
           -DCHIAKI_GUI_ENABLE_SDL_GAMECONTROLLER=ON `
           -DCHIAKI_ENABLE_STEAMDECK_NATIVE=OFF `
-          -DPYTHON_EXECUTABLE="${{ env.pythonLocation }}\python.exe" `
+          -DPYTHON_EXECUTABLE="$((Get-Command python).Source)" `
           -DCMAKE_PREFIX_PATH="${{ github.workspace }}\${{ env.dep_folder }};${{ env.VULKAN_SDK }}"
 
       - name: Build chiaki-ng
@@ -183,20 +193,21 @@ jobs:
           windeployqt.exe --no-translations --qmldir=gui\src\qml --release chiaki-ng-Win\chiaki.exe
 
       - name: Package chiaki-ng
+        id: package
         run: |
           $CHIAKI_VERSION_MAJOR = (Select-String -Path .\CMakeLists.txt -Pattern 'set\(CHIAKI_VERSION_MAJOR ([0-9]+)\)') | %{$_.Matches.Groups[1].value}
           $CHIAKI_VERSION_MINOR = (Select-String -Path .\CMakeLists.txt -Pattern 'set\(CHIAKI_VERSION_MINOR ([0-9]+)\)') | %{$_.Matches.Groups[1].value}
           $CHIAKI_VERSION_PATCH = (Select-String -Path .\CMakeLists.txt -Pattern 'set\(CHIAKI_VERSION_PATCH ([0-9]+)\)') | %{$_.Matches.Groups[1].value}
           $RELEASE_PACKAGE_FILE = "chiaki-ng-win_x64-VC-portable-$CHIAKI_VERSION_MAJOR.$CHIAKI_VERSION_MINOR.$CHIAKI_VERSION_PATCH-test-build-${{ github.sha }}.zip"
-          Compress-Archive chiaki-ng-Win $RELEASE_PACKAGE_FILE
-          $release_filepath = Get-ChildItem $RELEASE_PACKAGE_FILE | %{$_[0].FullName}
-          echo "RELEASE_PACKAGE_PATH=$release_filepath" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
+          $release_filepath = Join-Path $PWD $RELEASE_PACKAGE_FILE
+          Compress-Archive -Path .\chiaki-ng-Win -DestinationPath $release_filepath -Force
+          "release_package_path=$release_filepath" | Out-File -FilePath $Env:GITHUB_OUTPUT -Encoding utf8 -Append
 
       - name: Upload chiaki-ng Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: chiaki-ng-win_x64-VC-Release
-          path: ${{ env.RELEASE_PACKAGE_PATH }}
+          path: ${{ steps.package.outputs.release_package_path }}
           if-no-files-found: error
           retention-days: 7
 
@@ -207,7 +218,7 @@ jobs:
           options: /O+
 
       - name: Upload chiaki-ng Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: chiaki-ng-win_x64-VC-installer.zip
           path: chiaki-ng-windows-installer.exe
