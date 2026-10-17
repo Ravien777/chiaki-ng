@@ -346,31 +346,12 @@ QmlBackend::QmlBackend(Settings *settings, QmlMainWindow *window)
     connect(this, &QmlBackend::controllersChanged, this, &QmlBackend::updateControllerMappings);
     auto_connect_mac = settings->GetAutoConnectHost().GetServerMAC();
     auto_connect_nickname = settings->GetAutoConnectHost().GetServerNickname();
-    psn_auto_connect_timer = new QTimer(this);
-    psn_auto_connect_timer->setSingleShot(true);
+    createPsnAutoConnectTimer();
     psn_reconnect_tries = 0;
     psn_reconnect_timer = new QTimer(this);
     wakeup_start_timer = new QTimer(this);
     wakeup_start_timer->setSingleShot(true);
-    if(autoConnect() && !auto_connect_nickname.isEmpty())
-    {
-        connect(psn_auto_connect_timer, &QTimer::timeout, this, [this]
-        {
-            int i = 0;
-            for (const auto &host : std::as_const(psn_hosts))
-            {
-                if(host.GetName() == auto_connect_nickname)
-                {
-                    int index = discovery_manager.GetHosts().size() + this->settings->GetManualHosts().size() + i;
-                    connectToHost(index);
-                    return;
-                }
-                i++;
-            }
-            qCWarning(chiakiGui) << "Couldn't find PSN host with the requested nickname: " << auto_connect_nickname;
-        });
-        psn_auto_connect_timer->start(PSN_INTERNET_WAIT_SECONDS * 1000);
-    }
+    startPsnAutoConnectTimer();
     connect(psn_reconnect_timer, &QTimer::timeout, this, [this]{
         QString refresh = this->settings->GetPsnRefreshToken();
         if(refresh.isEmpty())
@@ -412,7 +393,6 @@ QmlBackend::QmlBackend(Settings *settings, QmlMainWindow *window)
     {
         emit wakeupStartFailed();
     });
-    psn_auto_connect_timer->start(PSN_INTERNET_WAIT_SECONDS * 1000);
     sleep_inhibit = new SystemdInhibit(QGuiApplication::applicationName(), tr("Remote Play session"), "sleep", "delay", this);
     connect(sleep_inhibit, &SystemdInhibit::sleep, this, &QmlBackend::goToSleep);
     connect(sleep_inhibit, &SystemdInhibit::resume, this, &QmlBackend::resumeFromSleep);
@@ -426,7 +406,9 @@ QmlBackend::QmlBackend(Settings *settings, QmlMainWindow *window)
     connect(windows_wake_sleep, &WindowsWakeSleep::wokeUp, this, &QmlBackend::resumeFromSleep);
     connect(windows_wake_sleep, &WindowsWakeSleep::sleeping, this, &QmlBackend::goToSleep);
 #endif
-    refreshPsnToken();
+    // Delay the initial PSN token refresh so it does not compete with window
+    // creation and GPU initialization during startup.
+    QTimer::singleShot(2000, this, &QmlBackend::refreshPsnToken);
 }
 
 bool QmlBackend::prepareFrameForPresentation(ChiakiFfmpegFrame &frame, bool use_opengl_renderer)
@@ -605,29 +587,10 @@ void QmlBackend::profileChanged()
     auto_connect_nickname = settings->GetAutoConnectHost().GetServerNickname();
     psn_reconnect_timer->deleteLater();
     psn_auto_connect_timer->deleteLater();
-    psn_auto_connect_timer = new QTimer(this);
-    psn_auto_connect_timer->setSingleShot(true);
+    createPsnAutoConnectTimer();
     psn_reconnect_tries = 0;
     psn_reconnect_timer = new QTimer(this);
-    if(autoConnect() && !auto_connect_nickname.isEmpty())
-    {
-        connect(psn_auto_connect_timer, &QTimer::timeout, this, [this]
-        {
-            int i = 0;
-            for (const auto &host : std::as_const(psn_hosts))
-            {
-                if(host.GetName() == auto_connect_nickname)
-                {
-                    int index = discovery_manager.GetHosts().size() + this->settings->GetManualHosts().size() + i;
-                    connectToHost(index);
-                    return;
-                }
-                i++;
-            }
-            qCWarning(chiakiGui) << "Couldn't find PSN host with the requested nickname: " << auto_connect_nickname;
-        });
-        psn_auto_connect_timer->start(PSN_INTERNET_WAIT_SECONDS * 1000);
-    }
+    startPsnAutoConnectTimer();
     connect(psn_reconnect_timer, &QTimer::timeout, this, [this]{
         QString refresh = this->settings->GetPsnRefreshToken();
         if(refresh.isEmpty())
@@ -699,6 +662,35 @@ void QmlBackend::setDiscoveryEnabled(bool enabled)
     emit discoveryEnabledChanged();
 }
 
+void QmlBackend::createPsnAutoConnectTimer()
+{
+    psn_auto_connect_timer = new QTimer(this);
+    psn_auto_connect_timer->setSingleShot(true);
+    connect(psn_auto_connect_timer, &QTimer::timeout, this, [this]
+    {
+        if(auto_connect_nickname.isEmpty())
+            return;
+        int i = 0;
+        for (const auto &host : std::as_const(psn_hosts))
+        {
+            if(host.GetName() == auto_connect_nickname)
+            {
+                int index = discovery_manager.GetHosts().size() + this->settings->GetManualHosts().size() + i;
+                connectToHost(index);
+                return;
+            }
+            i++;
+        }
+        qCWarning(chiakiGui) << "Couldn't find PSN host with the requested nickname: " << auto_connect_nickname;
+    });
+}
+
+void QmlBackend::startPsnAutoConnectTimer()
+{
+    if(autoConnect() && !auto_connect_nickname.isEmpty())
+        psn_auto_connect_timer->start(PSN_INTERNET_WAIT_SECONDS * 1000);
+}
+
 QmlBackend::PsnConnectState QmlBackend::connectState() const
 {
     return psn_connect_state;
@@ -728,6 +720,11 @@ void QmlBackend::setConnectState(PsnConnectState connect_state)
         else
             window->showMaximized();
     }
+    if(auto_regist_pending
+            && (connect_state == PsnConnectState::ConnectFailed
+                || connect_state == PsnConnectState::ConnectFailedStart
+                || connect_state == PsnConnectState::ConnectFailedConsoleUnreachable))
+        scheduleAutoRegistFallback();
     emit connectStateChanged();
 }
 
@@ -851,6 +848,8 @@ bool QmlBackend::autoConnect() const
 
 void QmlBackend::psnCancel(bool stop_thread)
 {
+    // user-initiated cancel should not trigger the PIN registration fallback
+    auto_regist_pending = false;
     session->CancelPsnConnection(stop_thread);
 }
 
@@ -954,6 +953,7 @@ void QmlBackend::createSession(const StreamSessionConnectInfo &connect_info)
     }
 
     session_info = connect_info;
+    auto_regist_pending = connect_info.auto_regist;
     window->setStreamMaxFPS(connect_info.video_profile.max_fps);
     disable_zero_copy = !settings->GetUseZeroCopy();
     {
@@ -1101,6 +1101,7 @@ void QmlBackend::createSession(const StreamSessionConnectInfo &connect_info)
         session = new StreamSession(session_info, this);
     } catch (const Exception &e) {
         emit error(tr("Stream failed"), tr("Failed to initialize Stream Session: %1").arg(e.what()));
+        scheduleAutoRegistFallback();
         return;
     }
 
@@ -1154,6 +1155,8 @@ void QmlBackend::createSession(const StreamSessionConnectInfo &connect_info)
                 m += "\n" + tr("Reason") + ": \"" + reason_str + "\"";
             emit sessionError(tr("Session has quit"), m);
         }
+
+        scheduleAutoRegistFallback();
 
         chiaki_log_mutex.lock();
         chiaki_log_ctx = nullptr;
@@ -1435,7 +1438,11 @@ void QmlBackend::autoRegister()
     QString expiry_s = settings->GetPsnAuthTokenExpiry();
     QString refresh = settings->GetPsnRefreshToken();
     if(expiry_s.isEmpty() || refresh.isEmpty())
+    {
+        // no usable PSN credentials for automatic registration, offer manual PIN registration instead
+        emit registDialogRequested(server.GetHostAddr(), server.IsPS5(), QString());
         return;
+    }
     QDateTime expiry = QDateTime::fromString(expiry_s, settings->GetTimeFormat());
     // give 1 minute buffer
     QDateTime now = QDateTime::currentDateTime().addSecs(60);
@@ -1444,8 +1451,15 @@ void QmlBackend::autoRegister()
         PSNToken *psnToken = new PSNToken(settings, this);
         connect(psnToken, &PSNToken::PSNTokenError, this, [this](const QString &error) {
             qCWarning(chiakiGui) << "Could not refresh token. Automatic PSN Connection Unavailable!" << error;
+            // defer, so the credentials-expired flow (which emits UnauthorizedError right after)
+            // can decide between the PSN login prompt and the PIN registration fallback
+            QTimer::singleShot(0, this, [this] { scheduleAutoRegistFallback(); });
         });
-        connect(psnToken, &PSNToken::UnauthorizedError, this, &QmlBackend::psnCredsExpired);
+        connect(psnToken, &PSNToken::UnauthorizedError, this, [this] {
+            // PSN credentials went away, the PSN login dialog handles this, don't offer the PIN fallback
+            auto_regist_pending = false;
+            emit psnCredsExpired();
+        });
         connect(psnToken, &PSNToken::PSNTokenSuccess, this, []() {
             qCWarning(chiakiGui) << "PSN Remote Connection Tokens Refreshed.";
         });
@@ -1466,11 +1480,27 @@ void QmlBackend::finishAutoRegister(const ChiakiRegisteredHost &host)
     if(!regist_dialog_server.discovery_host.ps5 && regist_dialog_server.discovery_host.host_name != nickname)
     {
         emit error(tr("PS4 Console Not Main"), tr("Can't proceed...%1 is not your main PS4 console in PSN").arg(regist_dialog_server.discovery_host.host_name));
+        scheduleAutoRegistFallback();
         return;
     }
+    auto_regist_pending = false;
     settings->AddRegisteredHost(host);
     setConnectState(PsnConnectState::RegistrationFinished);
     updatePsnHosts();
+}
+
+void QmlBackend::scheduleAutoRegistFallback()
+{
+    if (!auto_regist_pending)
+        return;
+    auto_regist_pending = false;
+    const QString host = regist_dialog_server.GetHostAddr();
+    const bool ps5 = regist_dialog_server.IsPS5();
+    // wait a moment so the PSN connection view has returned to the main view
+    QTimer::singleShot(2600, this, [this, host, ps5]() {
+        qCInfo(chiakiGui) << "Automatic registration via PSN failed, offering Remote Play PIN registration instead";
+        emit autoRegistFailed(host, ps5);
+    });
 }
 
 #ifdef CHIAKI_HAVE_WEBENGINE
@@ -1523,7 +1553,12 @@ void QmlBackend::connectToHost(int index, QString nickname)
 
     if (!server.registered) {
         regist_dialog_server = server;
-        emit registDialogRequested(server.GetHostAddr(), server.IsPS5(), server.duid);
+        if(settings->GetAutoRegistrationEnabled()
+                && !server.duid.isEmpty()
+                && !settings->GetPsnRefreshToken().isEmpty())
+            autoRegister();
+        else
+            emit registDialogRequested(server.GetHostAddr(), server.IsPS5(), server.duid);
         return;
     }
 

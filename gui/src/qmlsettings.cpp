@@ -78,6 +78,17 @@ void QmlSettings::setRemotePlayAsk(bool asked)
     emit remotePlayAskChanged();
 }
 
+bool QmlSettings::autoRegistrationEnabled() const
+{
+    return settings->GetAutoRegistrationEnabled();
+}
+
+void QmlSettings::setAutoRegistrationEnabled(bool enabled)
+{
+    settings->SetAutoRegistrationEnabled(enabled);
+    emit autoRegistrationEnabledChanged();
+}
+
 bool QmlSettings::addSteamShortcutAsk() const
 {
     return settings->GetAddSteamShortcutAsk();
@@ -1879,6 +1890,7 @@ void QmlSettings::setSettings(Settings *new_settings)
 void QmlSettings::refreshAllKeys()
 {
     emit remotePlayAskChanged();
+    emit autoRegistrationEnabledChanged();
     emit addSteamShortcutAskChanged();
     emit hideCursorChanged();
     emit audioVideoDisabledChanged();

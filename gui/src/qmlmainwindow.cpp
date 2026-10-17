@@ -2476,6 +2476,57 @@ static const struct pl_hook *select_spatial_hook(QmlMainWindow::VideoPreset pres
     }
 }
 
+void QmlMainWindow::ensureSpatialHooksLoaded(VideoPreset preset, PlaceboUpscaler upscaler)
+{
+    // mpv shader hooks (FSR/FSRCNNX) are only needed by the spatial presets and
+    // by custom upscalers. Parsing them lazily avoids the parse cost and memory
+    // usage at startup for users who never select one of those modes.
+    bool need_fsr = false;
+    bool need_hook8 = false;
+    bool need_hook16 = false;
+    switch (preset) {
+    case VideoPreset::HighQualitySpatial:
+        need_fsr = true;
+        need_hook8 = true;
+        break;
+    case VideoPreset::HighQualityAdvancedSpatial:
+        need_fsr = true;
+        need_hook16 = true;
+        break;
+    case VideoPreset::Custom:
+        switch (upscaler) {
+        case PlaceboUpscaler::FSR:
+            need_fsr = true;
+            break;
+        case PlaceboUpscaler::FSRCNNX8:
+            // FSR is the fallback for small upscale factors
+            need_fsr = true;
+            need_hook8 = true;
+            break;
+        case PlaceboUpscaler::FSRCNNX16:
+            need_fsr = true;
+            need_hook16 = true;
+            break;
+        default:
+            break;
+        }
+        break;
+    default:
+        break;
+    }
+
+    if ((!need_fsr || fsr_hook) && (!need_hook8 || fsrcnnx_hook_8) && (!need_hook16 || fsrcnnx_hook_16))
+        return;
+
+    QMutexLocker locker(&spatial_hooks_mutex);
+    if (need_fsr && !fsr_hook)
+        fsr_hook = load_mpv_hook(placeboGpu(), QStringLiteral(":/shaders/FSR.glsl"));
+    if (need_hook8 && !fsrcnnx_hook_8)
+        fsrcnnx_hook_8 = load_mpv_hook(placeboGpu(), QStringLiteral(":/shaders/FSRCNNX_x2_8-0-4-1.glsl"));
+    if (need_hook16 && !fsrcnnx_hook_16)
+        fsrcnnx_hook_16 = load_mpv_hook(placeboGpu(), QStringLiteral(":/shaders/FSRCNNX_x2_16-0-4-1.glsl"));
+}
+
 static void clearQuickOpenGLTarget(QOpenGLFramebufferObject *fbo)
 {
     if (!fbo)
@@ -5256,9 +5307,8 @@ renderer_backend_ready:
     this->renderparams_opts = pl_options_alloc(this->placebo_log);
     pl_options_reset(this->renderparams_opts, &pl_render_high_quality_params);
     this->renderparams_changed = true;
-    this->fsr_hook = load_mpv_hook(placeboGpu(), QStringLiteral(":/shaders/FSR.glsl"));
-    this->fsrcnnx_hook_8 = load_mpv_hook(placeboGpu(), QStringLiteral(":/shaders/FSRCNNX_x2_8-0-4-1.glsl"));
-    this->fsrcnnx_hook_16 = load_mpv_hook(placeboGpu(), QStringLiteral(":/shaders/FSRCNNX_x2_16-0-4-1.glsl"));
+    // Spatial shader hooks are loaded lazily by ensureSpatialHooksLoaded() when
+    // a preset or upscaler that actually uses them is active.
 
 
     switch (settings->GetPlaceboPreset()) {
@@ -7396,6 +7446,7 @@ void QmlMainWindow::render()
         const float dst_height = fabsf(pl_rect_h(target_frame.crop));
         if (src_width > 0.0f && src_height > 0.0f) {
             const float upscale_factor = qMin(dst_width / src_width, dst_height / src_height);
+            ensureSpatialHooksLoaded(video_preset, configured_upscaler);
             fsrcnnx_hook = select_spatial_hook(video_preset, configured_upscaler, upscale_factor,
                                                fsr_hook, fsrcnnx_hook_8, fsrcnnx_hook_16);
         }

@@ -347,6 +347,14 @@ If you have one console you want to connect to remotely or locally you can use t
 
 ![Auto-Connect Settings](images/AutoConnect.png)
 
+### Automatic Registration
+
+By default (`Settings -> Remote (PSN and Hole Punching) -> Prefer Automatic Registration` checked), chiaki-ng will register consoles registered to your PSN account automatically over PSN when you try to connect to them, without ever needing the 8-digit Remote Play PIN from the PlayStation's Remote Play settings. This requires a one-time [Login to PSN](remoteconnection.md#setup) in chiaki-ng (the login token is refreshed automatically afterwards).
+
+If the automatic registration attempt fails (for example, the console doesn't support it, it isn't the main registered console on your PSN account for PS4, PSN can't be reached at that moment, or the network type is unsupported), chiaki-ng will offer to fall back to the standard Remote Play PIN registration instead: confirm the prompt and enter the PIN shown on your PlayStation under `Settings -> Remote Play -> Link Device`. Note that the Remote Play PIN itself is only ever required for this one-time registration; once the console is registered, connecting to it on the same network works automatically without prompting for a PIN again.
+
+Uncheck `Prefer Automatic Registration` if you prefer the previous behavior where chiaki-ng asks whether to use automatic registration (for consoles matched with your PSN devices) or offers the PIN registration dialog directly for everything else.
+
 ### Profiles
 
 You can switch between profiles in chiaki-ng. If, for example, you have 2 users that both use the same device, you can create a profile for each user. You can see your current profile at the top of the chiaki-ng window and listed at Settings (Gear icon)->Config->Current profile. You can create, switch, and delete profiles via Settings (Gear icon)->Config->Manage Profiles.

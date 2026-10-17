@@ -234,6 +234,7 @@ private:
     void beginFrame();
     void endFrame();
     void render();
+    void ensureSpatialHooksLoaded(VideoPreset preset, PlaceboUpscaler upscaler);
     void handleVulkanDeviceLost(const QString &reason);
     void handleVulkanRendererFallback(const QString &title, const QString &message, const QString &fallback_reason);
     void applyPendingFrame();
@@ -452,6 +453,7 @@ private:
     VkPhysicalDeviceDriverProperties vk_device_driver_props = {};
     pl_options renderparams_opts = {};
     bool renderparams_changed = false;
+    QMutex spatial_hooks_mutex;
     const struct pl_hook *fsr_hook = nullptr;
     const struct pl_hook *fsrcnnx_hook_8 = nullptr;
     const struct pl_hook *fsrcnnx_hook_16 = nullptr;

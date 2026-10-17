@@ -557,6 +557,10 @@ Item {
             }
         }
 
+        function onAutoRegistFailed(host, ps5) {
+            root.showConfirmDialog(qsTr("Automatic Registration Failed"), qsTr("Automatic registration via PSN failed. Would you like to register with the Remote Play PIN instead?"), () => showRegistDialog(host, ps5))
+        }
+
         function onWakeupStartInitiated() {
             stack.replace(stack.get(0), autoConnectViewComponent, {}, StackView.Immediate);
         }

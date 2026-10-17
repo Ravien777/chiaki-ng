@@ -3,6 +3,15 @@ cmake_minimum_required(VERSION 3.10)
 
 project(chiaki)
 
+# Default to a Release build when the user did not choose a build type.
+# This avoids accidentally building with -O0 when running cmake without
+# arguments. Multi-config generators (Visual Studio, Ninja Multi-Config, ...)
+# select the configuration at build time instead.
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+	set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
+	set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS Debug Release RelWithDebInfo MinSizeRel)
+endif()
+
 # Like option(), but the value can also be AUTO
 macro(tri_option name desc default)
     set("${name}" "${default}" CACHE STRING "${desc}")
@@ -37,6 +46,7 @@ tri_option(CHIAKI_USE_SYSTEM_NANOPB "Use system-provided nanopb instead of submo
 tri_option(CHIAKI_USE_SYSTEM_CURL "Use system-provided curl instead of submodule. Has to be built with experimental WebSocket support!" OFF)
 option(CHIAKI_LIB_JSONC_EXTERNAL_PROJECT "Build json-c from source via FetchContent" OFF)
 option(CHIAKI_LIB_MINIUPNPC_EXTERNAL_PROJECT "Build miniupnpc from source via FetchContent" OFF)
+tri_option(CHIAKI_ENABLE_LTO "Enable link-time optimization for first-party targets (AUTO: Release builds only, if the toolchain supports it)" AUTO)
 
 set(CHIAKI_VERSION_MAJOR 1)
 set(CHIAKI_VERSION_MINOR 10)
@@ -289,4 +299,32 @@ endif()
 
 if(CHIAKI_ENABLE_BOREALIS)
 	add_subdirectory(switch)
+endif()
+
+# Link-time optimization (LTO), applied to first-party targets only so that
+# third-party dependencies and FetchContent projects are left untouched.
+if(NOT CHIAKI_ENABLE_LTO STREQUAL OFF)
+	include(CheckIPOSupported)
+	check_ipo_supported(RESULT CHIAKI_LTO_SUPPORTED OUTPUT CHIAKI_LTO_SUPPORTED_ERROR)
+	if(CHIAKI_LTO_SUPPORTED)
+		set(CHIAKI_LTO_TARGETS chiaki-lib)
+		foreach(chiaki_lto_candidate chiaki-cli-lib chiaki-cli chiaki)
+			if(TARGET ${chiaki_lto_candidate})
+				list(APPEND CHIAKI_LTO_TARGETS ${chiaki_lto_candidate})
+			endif()
+		endforeach()
+		if(CHIAKI_ENABLE_LTO STREQUAL AUTO)
+			set_property(TARGET ${CHIAKI_LTO_TARGETS} PROPERTY INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE)
+			set_property(TARGET ${CHIAKI_LTO_TARGETS} PROPERTY INTERPROCEDURAL_OPTIMIZATION_RELWITHDEBINFO TRUE)
+		else()
+			set_property(TARGET ${CHIAKI_LTO_TARGETS} PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
+		endif()
+		message(STATUS "LTO enabled (${CHIAKI_ENABLE_LTO}) for targets: ${CHIAKI_LTO_TARGETS}")
+	elseif(CHIAKI_ENABLE_LTO STREQUAL AUTO)
+		message(STATUS "LTO not supported by toolchain, not enabling: ${CHIAKI_LTO_SUPPORTED_ERROR}")
+	else()
+		message(FATAL_ERROR "CHIAKI_ENABLE_LTO is enabled, but the toolchain does not support it: ${CHIAKI_LTO_SUPPORTED_ERROR}")
+	endif()
+else()
+	message(STATUS "LTO disabled")
 endif()

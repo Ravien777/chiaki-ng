@@ -247,6 +247,7 @@ signals:
     void sessionPinDialogRequested();
     void sessionStopDialogRequested();
     void registDialogRequested(const QString &host, bool ps5, const QString &duid);
+    void autoRegistFailed(const QString &host, bool ps5);
     void psnLoginAccountIdDone(const QString &accountId);
     void psnLoginAccountIdError(const QString &error);
 
@@ -276,6 +277,9 @@ private:
     void updateDiscoveryHosts();
     void updatePsnHosts();
     void updatePsnHostsThread();
+    void scheduleAutoRegistFallback();
+    void createPsnAutoConnectTimer();
+    void startPsnAutoConnectTimer();
     void updateAudioVolume();
     void resumeFromSleep();
     uint32_t getStreamShortcut() const;
@@ -298,6 +302,7 @@ private:
     QHash<int, QmlController*> controllers;
     DisplayServer regist_dialog_server;
     StreamSessionConnectInfo session_info = {};
+    bool auto_regist_pending = false;
     SystemdInhibit *sleep_inhibit = {};
 #ifdef Q_OS_MACOS
     MacWakeSleep *mac_wake_sleep = {};

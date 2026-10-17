@@ -43,6 +43,17 @@ DialogView {
             columnSpacing: 20
 
             Label {
+                Layout.columnSpan: 2
+                Layout.alignment: Qt.AlignHCenter
+                Layout.maximumWidth: 480
+                wrapMode: Text.Wrap
+                horizontalAlignment: Text.AlignHCenter
+                font.italic: true
+                visible: !Chiaki.settings.psnRefreshToken
+                text: qsTr("Tip: Login to PSN below to register consoles registered to your PSN account automatically, without needing a Remote Play PIN.")
+            }
+
+            Label {
                 Layout.alignment: Qt.AlignRight
                 text: qsTr("Host:")
             }

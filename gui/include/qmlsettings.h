@@ -6,6 +6,7 @@ class QmlSettings : public QObject
 {
     Q_OBJECT
     Q_PROPERTY(bool remotePlayAsk READ remotePlayAsk WRITE setRemotePlayAsk NOTIFY remotePlayAskChanged)
+    Q_PROPERTY(bool autoRegistrationEnabled READ autoRegistrationEnabled WRITE setAutoRegistrationEnabled NOTIFY autoRegistrationEnabledChanged)
     Q_PROPERTY(bool addSteamShortcutAsk READ addSteamShortcutAsk WRITE setAddSteamShortcutAsk NOTIFY addSteamShortcutAskChanged)
     Q_PROPERTY(bool hideCursor READ hideCursor WRITE setHideCursor NOTIFY hideCursorChanged)
     Q_PROPERTY(int audioVideoDisabled READ audioVideoDisabled WRITE setAudioVideoDisabled NOTIFY audioVideoDisabledChanged)
@@ -246,6 +247,9 @@ public:
 
     bool remotePlayAsk() const;
     void setRemotePlayAsk(bool asked);
+
+    bool autoRegistrationEnabled() const;
+    void setAutoRegistrationEnabled(bool enabled);
 
     bool addSteamShortcutAsk() const;
     void setAddSteamShortcutAsk(bool asked);
@@ -636,6 +640,7 @@ signals:
 #endif
     void fullscreenDoubleClickChanged();
     void remotePlayAskChanged();
+    void autoRegistrationEnabledChanged();
     void addSteamShortcutAskChanged();
     void hideCursorChanged();
     void hapticOverrideChanged();

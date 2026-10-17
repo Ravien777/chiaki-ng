@@ -2906,6 +2906,24 @@ DialogView {
 
                         Label {
                             Layout.alignment: Qt.AlignRight
+                            text: qsTr("Prefer Automatic Registration:")
+                        }
+
+                        C.CheckBox {
+                            id: autoRegistrationCheckbox
+                            text: qsTr("Try registering consoles automatically over PSN first (Remote Play PIN only used as fallback)")
+                            checked: Chiaki.settings.autoRegistrationEnabled
+                            onToggled: Chiaki.settings.autoRegistrationEnabled = checked
+                        }
+
+                        Label {
+                            Layout.alignment: Qt.AlignRight
+                            text: qsTr("(Checked)")
+                        }
+
+
+                        Label {
+                            Layout.alignment: Qt.AlignRight
                             text: qsTr("Hole Punching Port Guessing:")
                         }
 

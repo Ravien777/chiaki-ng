@@ -129,6 +129,7 @@ static QSet<QPair<uint16_t, uint16_t>> chiaki_steam_virtual_controller_ids({
 static ControllerManager *instance = nullptr;
 
 #define UPDATE_INTERVAL_MS 4
+#define IDLE_UPDATE_INTERVAL_MS 15
 #define MOVE_CHECK_MS 1000
 
 ControllerManager *ControllerManager::GetInstance()
@@ -154,8 +155,9 @@ ControllerManager::ControllerManager(QObject *parent)
 		return;
 
 	auto timer = new QTimer(this);
+	event_pump_timer = timer;
 	connect(timer, &QTimer::timeout, this, &ControllerManager::HandleEvents);
-	timer->start(UPDATE_INTERVAL_MS);
+	timer->start(is_app_active ? UPDATE_INTERVAL_MS : IDLE_UPDATE_INTERVAL_MS);
 	auto move_timer = new QTimer(this);
 	connect(move_timer, &QTimer::timeout, this, &ControllerManager::CheckMoved);
 	move_timer->start(MOVE_CHECK_MS);
@@ -189,6 +191,12 @@ void ControllerManager::CheckMoved()
 void ControllerManager::SetIsAppActive(bool active)
 {
 	this->is_app_active = active;
+#ifdef CHIAKI_GUI_ENABLE_SDL_GAMECONTROLLER
+	// Poll controller events at full rate only while the application is
+	// active; slow down in the background to save wakeups and battery.
+	if(event_pump_timer)
+		event_pump_timer->start(active ? UPDATE_INTERVAL_MS : IDLE_UPDATE_INTERVAL_MS);
+#endif
 }
 
 void ControllerManager::SetButtonsByPos()

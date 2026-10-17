@@ -253,6 +253,9 @@ class Settings : public QObject
 		bool GetRemotePlayAsk() const           { return settings.value("settings/remote_play_ask", true).toBool(); }
 		void SetRemotePlayAsk(bool asked)       { settings.setValue("settings/remote_play_ask", asked); }
 
+		bool GetAutoRegistrationEnabled() const  { return settings.value("settings/auto_registration_enabled", true).toBool(); }
+		void SetAutoRegistrationEnabled(bool enabled) { settings.setValue("settings/auto_registration_enabled", enabled); }
+
 		bool GetAddSteamShortcutAsk() const           { return settings.value("settings/add_steam_shortcut_ask", true).toBool(); }
 		void SetAddSteamShortcutAsk(bool asked)       { settings.setValue("settings/add_steam_shortcut_ask", asked); }
 

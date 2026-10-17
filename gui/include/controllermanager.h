@@ -32,6 +32,7 @@ class ControllerManager : public QObject
 		QSet<SDL_JoystickID> available_controllers;
 #endif
 		QMap<int, Controller *> open_controllers;
+		QTimer *event_pump_timer = nullptr;
 		bool creating_controller_mapping;
 		bool joystick_allow_background_events;
 		bool is_app_active;
