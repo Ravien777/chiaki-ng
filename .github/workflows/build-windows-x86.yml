@@ -26,7 +26,7 @@ jobs:
       - name: Install MSYS2 toolchain and dependencies
         uses: msys2/setup-msys2@v2
         with:
-          msystem: mingw64
+          msystem: ucrt64
           update: true
           install: git make unzip zip
           pacboy: >-
@@ -72,20 +72,20 @@ jobs:
 
       - name: Build libplacebo
         run: |
-          scripts/build-libplacebo-windows.sh
+          MSYS2_PREFIX=/ucrt64 scripts/build-libplacebo-windows.sh
 
       - name: Setup FFmpeg
         run: |
           curl -fL --retry 3 --retry-delay 2 -o ffmpeg-n7.1-latest-win64-gpl-shared-7.1.zip https://github.com/streetpea/FFmpeg-Builds/releases/download/latest/ffmpeg-n7.1-latest-win64-gpl-shared-7.1.zip
           unzip -q ffmpeg-n7.1-latest-win64-gpl-shared-7.1.zip
-          cp -a "ffmpeg-n7.1-latest-win64-gpl-shared-7.1/bin/." /mingw64/bin/
-          cp -a "ffmpeg-n7.1-latest-win64-gpl-shared-7.1/include/." /mingw64/include/
-          cp -a "ffmpeg-n7.1-latest-win64-gpl-shared-7.1/lib/." /mingw64/lib/
+          cp -a "ffmpeg-n7.1-latest-win64-gpl-shared-7.1/bin/." /ucrt64/bin/
+          cp -a "ffmpeg-n7.1-latest-win64-gpl-shared-7.1/include/." /ucrt64/include/
+          cp -a "ffmpeg-n7.1-latest-win64-gpl-shared-7.1/lib/." /ucrt64/lib/
 
       - name: Build SDL2 compatibility layer
         run: |
-          INSTALL_PREFIX=/mingw64 scripts/build-sdl2-compat.sh .
-          cp /mingw64/lib/pkgconfig/sdl2-compat.pc /mingw64/lib/pkgconfig/sdl2.pc
+          INSTALL_PREFIX=/ucrt64 scripts/build-sdl2-compat.sh .
+          cp /ucrt64/lib/pkgconfig/sdl2-compat.pc /ucrt64/lib/pkgconfig/sdl2.pc
 
       - name: Apply repository patches
         run: |
@@ -101,7 +101,7 @@ jobs:
 
       - name: Deploy portable Windows package
         run: |
-          ./scripts/deploy-windows-msys2.sh chiaki-ng-Win build/gui/chiaki.exe "${GITHUB_WORKSPACE}/build/third-party/cpp-steam-tools" /mingw64 gui/src/qml
+          ./scripts/deploy-windows-msys2.sh chiaki-ng-Win build/gui/chiaki.exe "${GITHUB_WORKSPACE}/build/third-party/cpp-steam-tools" /ucrt64 gui/src/qml
 
       - name: Package portable build
         run: |
