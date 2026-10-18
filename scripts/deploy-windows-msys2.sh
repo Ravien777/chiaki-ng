@@ -77,19 +77,23 @@ enqueue_dependency() {
     fi
 }
 
-while [[ ${#queue[@]} -gt 0 ]]; do
-    current="${queue[0]}"
-    queue=("${queue[@]:1}")
+process_queue() {
+    while [[ ${#queue[@]} -gt 0 ]]; do
+        current="${queue[0]}"
+        queue=("${queue[@]:1}")
 
-    if [[ -n "${scanned_paths["$current"]+x}" ]]; then
-        continue
-    fi
-    scanned_paths["$current"]=1
+        if [[ -n "${scanned_paths["$current"]+x}" ]]; then
+            continue
+        fi
+        scanned_paths["$current"]=1
 
-    while IFS= read -r dependency; do
-        enqueue_dependency "$dependency"
-    done < <(extract_dependencies "$current")
-done
+        while IFS= read -r dependency; do
+            enqueue_dependency "$dependency"
+        done < <(extract_dependencies "$current")
+    done
+}
+
+process_queue
 
 # Ensure SDL3 is bundled even if ldd/Qt doesn't list it.
 shopt -s nullglob
@@ -104,6 +108,18 @@ done
 shopt -u nullglob
 
 windeployqt6.exe --no-translations --qmldir="$qml_dir" "$output_dir/$(basename "$exe_path")"
+
+# windeployqt6 copies Qt plugins (e.g. image format plugins) whose own
+# MinGW dependencies were not part of the original ldd closure. Walk the
+# deployed tree once more so those dependencies are bundled as well.
+while IFS= read -r binary; do
+    if [[ -z "${scanned_paths["$binary"]+x}" && -z "${queued_paths["$binary"]+x}" ]]; then
+        queue+=("$binary")
+        queued_paths["$binary"]=1
+    fi
+done < <(find "$output_dir" -type f \( -iname '*.dll' -o -iname '*.exe' \))
+
+process_queue
 
 # Remove system-provided DLLs that Windows already supplies and
 # should not be bundled with the MSYS2 build (e.g. D3D compiler). Use
